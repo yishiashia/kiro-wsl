@@ -1,0 +1,117 @@
+{
+  "name": "kiro-wsl",
+  "displayName": "Kiro WSL",
+  "description": "Open any folder in WSL2 and take advantage of Kiro's full feature set.",
+  "version": "0.1.0",
+  "publisher": "yishiashia",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/yishiashia/kiro-wsl"
+  },
+  "bugs": {
+    "url": "https://github.com/yishiashia/kiro-wsl/issues"
+  },
+  "homepage": "https://github.com/yishiashia/kiro-wsl#readme",
+  "engines": {
+    "vscode": "^1.70.2"
+  },
+  "extensionKind": [
+    "ui"
+  ],
+  "enabledApiProposals": [
+    "resolvers",
+    "contribViewsRemote"
+  ],
+  "activationEvents": [
+    "onResolveRemoteAuthority:wsl",
+    "onStartupFinished"
+  ],
+  "main": "./out/extension.js",
+  "contributes": {
+    "commands": [
+      {
+        "command": "kirowsl.connect",
+        "title": "Connect to WSL",
+        "category": "Kiro WSL"
+      },
+      {
+        "command": "kirowsl.connectInNewWindow",
+        "title": "Connect to WSL (New Window)",
+        "category": "Kiro WSL"
+      },
+      {
+        "command": "kirowsl.connectUsingDistro",
+        "title": "Connect to WSL using Distro...",
+        "category": "Kiro WSL"
+      },
+      {
+        "command": "kirowsl.connectUsingDistroInNewWindow",
+        "title": "Connect to WSL using Distro in New Window...",
+        "category": "Kiro WSL"
+      },
+      {
+        "command": "kirowsl.showLog",
+        "title": "Show Log",
+        "category": "Kiro WSL"
+      }
+    ],
+    "configuration": {
+      "title": "Kiro WSL",
+      "properties": {
+        "remote.WSL.serverDownloadUrlTemplate": {
+          "type": "string",
+          "default": "",
+          "description": "URL template for Kiro REH server download. Variables: ${version}, ${commit}, ${quality}, ${arch}, ${os}"
+        }
+      }
+    },
+    "views": {
+      "remote": [
+        {
+          "id": "wslTargets",
+          "name": "WSL Targets",
+          "group": "targets@1",
+          "remoteName": "wsl"
+        }
+      ]
+    },
+    "menus": {
+      "view/item/context": [
+        {
+          "command": "kirowsl.connect",
+          "when": "view == wslTargets && viewItem == distro",
+          "group": "inline@1"
+        },
+        {
+          "command": "kirowsl.connectInNewWindow",
+          "when": "view == wslTargets && viewItem == distro",
+          "group": "inline@2"
+        }
+      ]
+    }
+  },
+  "scripts": {
+    "compile": "webpack --mode development",
+    "watch": "webpack --mode development --watch",
+    "build": "webpack --mode production",
+    "lint": "eslint src --ext ts",
+    "test": "mocha --require ts-node/register --require src/test/setup.ts 'src/test/**/*.test.ts'",
+    "package": "npx @vscode/vsce package --no-dependencies"
+  },
+  "devDependencies": {
+    "@types/chai": "^4.3.11",
+    "@types/mocha": "^10.0.6",
+    "@types/node": "^18.19.0",
+    "@types/sinon": "^17.0.3",
+    "@types/vscode": "^1.70.2",
+    "chai": "^4.4.1",
+    "mocha": "^10.2.0",
+    "sinon": "^17.0.1",
+    "ts-loader": "^9.5.1",
+    "ts-node": "^10.9.2",
+    "typescript": "^5.3.3",
+    "webpack": "^5.89.0",
+    "webpack-cli": "^5.1.4"
+  }
+}
