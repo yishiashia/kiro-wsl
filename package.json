@@ -13,6 +13,9 @@
     "url": "https://github.com/yishiashia/kiro-wsl/issues"
   },
   "homepage": "https://github.com/yishiashia/kiro-wsl#readme",
+  "icon": "icon.png",
+  "categories": ["Other"],
+  "keywords": ["wsl", "remote", "linux", "wsl2", "kiro"],
   "engines": {
     "vscode": "^1.70.2"
   },
@@ -113,5 +116,8 @@
     "typescript": "^5.3.3",
     "webpack": "^5.89.0",
     "webpack-cli": "^5.1.4"
+  },
+  "dependencies": {
+    "jsonc-parser": "^3.3.1"
   }
 }

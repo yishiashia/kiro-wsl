@@ -19,8 +19,8 @@ describe('RemoteWSLResolver', () => {
             expect(() => RemoteWSLResolver.parseAuthority('ssh+host')).to.throw('Invalid WSL authority');
         });
 
-        it('should handle empty distro name', () => {
-            expect(RemoteWSLResolver.parseAuthority('wsl+')).to.equal('');
+        it('should throw on empty distro name', () => {
+            expect(() => RemoteWSLResolver.parseAuthority('wsl+')).to.throw('missing the distribution name');
         });
     });
 });

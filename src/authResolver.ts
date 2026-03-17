@@ -97,7 +97,10 @@ export class RemoteWSLResolver {
         if (!authority.startsWith(prefix)) {
             throw new Error(`Invalid WSL authority: ${authority}`);
         }
-        const distro = authority.substring(prefix.length);
-        return decodeURIComponent(distro);
+        const distro = decodeURIComponent(authority.substring(prefix.length));
+        if (!distro) {
+            throw new Error('WSL authority is missing the distribution name (got "wsl+")');
+        }
+        return distro;
     }
 }

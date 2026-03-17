@@ -25,28 +25,89 @@ export class WSLManager {
 
     async listDistros(): Promise<WSLDistro[]> {
         this.logger.info('Listing WSL distributions...');
-        const result = await this.runWslCommand(['--list', '--verbose']);
-        return WSLManager.parseDistroList(result);
+
+        // Use -l -q to get names only — avoids localization issues with --verbose state strings
+        const namesOutput = await this.runWslCommand(['-l', '-q']);
+        const names = namesOutput
+            .split('\n')
+            .map(l => l.replace(/\0/g, '').trim())  // strip NUL chars from UTF-16 output
+            .filter(l => l.length > 0);
+
+        if (names.length === 0) {
+            return [];
+        }
+
+        // Detect default distro name from --list --verbose (just column 1, any locale)
+        let defaultName = '';
+        try {
+            const verboseOutput = await this.runWslCommand(['--list', '--verbose']);
+            for (const line of verboseOutput.split('\n')) {
+                if (line.trimStart().startsWith('*')) {
+                    // default marker — grab the first word after the asterisk
+                    const parts = line.replace(/\0/g, '').trimStart().substring(1).trim().split(/\s+/);
+                    if (parts[0]) {
+                        defaultName = parts[0];
+                    }
+                    break;
+                }
+            }
+        } catch {
+            // if verbose fails, continue without default detection
+        }
+
+        // Probe each distro's running state and WSL version
+        const distros: WSLDistro[] = await Promise.all(names.map(async (name) => {
+            let state: WSLDistro['state'] = 'Stopped';
+            let version: 1 | 2 = 2;
+
+            try {
+                // wsl -d <name> --status exits 0 and prints WSL version if running/available
+                const statusOut = await this.runWslCommand(['-d', name, '--exec', 'echo', 'ok']);
+                if (statusOut.includes('ok')) {
+                    state = 'Running';
+                }
+            } catch {
+                state = 'Stopped';
+            }
+
+            try {
+                const infoOut = await this.runWslCommand(['--list', '--verbose']);
+                for (const line of infoOut.split('\n')) {
+                    const clean = line.replace(/\0/g, '').replace(/^\s*\*?\s*/, '');
+                    if (clean.startsWith(name)) {
+                        const parts = clean.trim().split(/\s+/);
+                        const v = parseInt(parts[parts.length - 1], 10);
+                        if (v === 1 || v === 2) {
+                            version = v;
+                        }
+                        break;
+                    }
+                }
+            } catch {
+                // default to version 2
+            }
+
+            return { name, state, version, isDefault: name === defaultName };
+        }));
+
+        return distros;
     }
 
+    // Kept for unit tests
     static parseDistroList(output: string): WSLDistro[] {
         const lines = output.split('\n').map(l => l.trim()).filter(l => l.length > 0);
 
-        // Skip header line
         if (lines.length <= 1) {
             return [];
         }
 
         const distros: WSLDistro[] = [];
-
         for (let i = 1; i < lines.length; i++) {
-            const line = lines[i];
-            const parsed = WSLManager.parseDistroLine(line);
+            const parsed = WSLManager.parseDistroLine(lines[i]);
             if (parsed) {
                 distros.push(parsed);
             }
         }
-
         return distros;
     }
 
@@ -58,7 +119,6 @@ export class WSLManager {
             return null;
         }
 
-        // Split by whitespace; columns are: NAME STATE VERSION
         const parts = cleaned.split(/\s+/);
         if (parts.length < 3) {
             return null;

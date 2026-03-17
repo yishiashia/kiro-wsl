@@ -1,40 +1,33 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import * as vscode from 'vscode';
+import { parse, ParseError } from 'jsonc-parser';
 import { Logger } from './logger';
 
 const EXTENSION_ID = 'yishiashia.kiro-wsl';
 
-/**
- * Get the path to Kiro's argv.json.
- * Kiro stores it at ~/.kiro/argv.json (dataFolderName from product.json is ".kiro").
- */
 function getArgvJsonPath(): string {
     const homeDir = process.env.USERPROFILE || process.env.HOME || '';
     return path.join(homeDir, '.kiro', 'argv.json');
 }
 
-/**
- * Read argv.json, stripping single-line comments (// ...) that Kiro puts in the file.
- */
 function readArgvJson(filePath: string): Record<string, unknown> {
     const raw = fs.readFileSync(filePath, 'utf-8');
-    // Strip single-line comments (// ...) but not inside strings
-    const stripped = raw.replace(/^\s*\/\/.*$/gm, '');
-    return JSON.parse(stripped);
+    const errors: ParseError[] = [];
+    const parsed = parse(raw, errors);
+    if (errors.length > 0) {
+        throw new Error(`Failed to parse argv.json: ${errors.map(e => `offset ${e.offset}`).join(', ')}`);
+    }
+    return parsed as Record<string, unknown>;
 }
 
-/**
- * Write back argv.json preserving the comment header from the original file.
- */
 function writeArgvJson(filePath: string, data: Record<string, unknown>): void {
-    // Read original to preserve the comment header
+    // Preserve comment header lines from original file
     let header = '';
     try {
         const original = fs.readFileSync(filePath, 'utf-8');
-        const lines = original.split('\n');
         const headerLines: string[] = [];
-        for (const line of lines) {
+        for (const line of original.split('\n')) {
             if (line.trim().startsWith('//') || line.trim() === '') {
                 headerLines.push(line);
             } else {
@@ -52,10 +45,6 @@ function writeArgvJson(filePath: string, data: Record<string, unknown>): void {
     fs.writeFileSync(filePath, header + json + '\n', 'utf-8');
 }
 
-/**
- * Ensure that our extension ID is listed in argv.json's "enable-proposed-api".
- * Returns true if argv.json was modified (user needs to restart).
- */
 export async function ensureProposedApiEnabled(logger: Logger): Promise<boolean> {
     const argvPath = getArgvJsonPath();
 
@@ -84,7 +73,7 @@ export async function ensureProposedApiEnabled(logger: Logger): Promise<boolean>
         logger.info(`Added ${EXTENSION_ID} to enable-proposed-api in argv.json`);
 
         const action = await vscode.window.showInformationMessage(
-            'Kiro WSL: Proposed API has been enabled. Please restart Kiro to activate WSL remote support.',
+            'Kiro WSL: Configuration updated. Please restart Kiro to activate WSL remote support.',
             'Restart Now'
         );
 
@@ -96,7 +85,9 @@ export async function ensureProposedApiEnabled(logger: Logger): Promise<boolean>
     } catch (err) {
         logger.error('Failed to update argv.json', err);
         vscode.window.showErrorMessage(
-            `Kiro WSL: Failed to auto-configure argv.json. Please manually add "${EXTENSION_ID}" to "enable-proposed-api" in ${argvPath}`
+            `Kiro WSL: Failed to auto-configure argv.json. ` +
+            `Please manually add "${EXTENSION_ID}" to "enable-proposed-api" in ${argvPath}. ` +
+            `Error: ${err instanceof Error ? err.message : err}`
         );
         return false;
     }

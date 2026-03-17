@@ -1,5 +1,7 @@
 .vscode/**
 .vscode-test/**
+.github/**
+.claude/**
 src/**
 node_modules/**
 .gitignore
@@ -7,3 +9,4 @@ tsconfig.json
 webpack.config.js
 **/*.map
 **/*.ts
+*.vsix
