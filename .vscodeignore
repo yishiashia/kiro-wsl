@@ -10,3 +10,4 @@ webpack.config.js
 **/*.map
 **/*.ts
 *.vsix
+review*.md

@@ -33,7 +33,11 @@ class RecentFolderTreeItem extends vscode.TreeItem {
             title: 'Open Folder in WSL',
             arguments: [{
                 remoteAuthority: `wsl+${encodeURIComponent(distroName)}`,
-                folderUri: vscode.Uri.parse(`vscode-remote://wsl+${encodeURIComponent(distroName)}${folderPath}`),
+                folderUri: vscode.Uri.from({
+                    scheme: 'vscode-remote',
+                    authority: `wsl+${encodeURIComponent(distroName)}`,
+                    path: folderPath,
+                }),
             }],
         };
     }

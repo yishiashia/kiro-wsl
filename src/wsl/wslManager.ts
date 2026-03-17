@@ -26,71 +26,77 @@ export class WSLManager {
     async listDistros(): Promise<WSLDistro[]> {
         this.logger.info('Listing WSL distributions...');
 
-        // Use -l -q to get names only — avoids localization issues with --verbose state strings
+        // Use -l -q to get distro names — immune to Windows locale issues
         const namesOutput = await this.runWslCommand(['-l', '-q']);
         const names = namesOutput
             .split('\n')
-            .map(l => l.replace(/\0/g, '').trim())  // strip NUL chars from UTF-16 output
+            .map(l => l.replace(/\0/g, '').trim())
             .filter(l => l.length > 0);
 
         if (names.length === 0) {
             return [];
         }
 
-        // Detect default distro name from --list --verbose (just column 1, any locale)
-        let defaultName = '';
+        // Parse --list --verbose once for default marker, state, and version.
+        // State text may be localized (e.g. "執行中" on zh-TW Windows) so we
+        // accept any non-empty string. The version column (last) is always a
+        // number and the '*' default marker is locale-independent.
+        const infoMap = new Map<string, { isDefault: boolean; state: string; version: 1 | 2 }>();
         try {
             const verboseOutput = await this.runWslCommand(['--list', '--verbose']);
-            for (const line of verboseOutput.split('\n')) {
-                if (line.trimStart().startsWith('*')) {
-                    // default marker — grab the first word after the asterisk
-                    const parts = line.replace(/\0/g, '').trimStart().substring(1).trim().split(/\s+/);
-                    if (parts[0]) {
-                        defaultName = parts[0];
-                    }
-                    break;
+            const lines = verboseOutput.split('\n').map(l => l.replace(/\0/g, ''));
+            // Skip header (first non-empty line)
+            for (let i = 1; i < lines.length; i++) {
+                const raw = lines[i];
+                if (!raw.trim()) { continue; }
+
+                const isDefault = raw.trimStart().startsWith('*');
+                const cleaned = isDefault ? raw.trimStart().substring(1).trim() : raw.trim();
+                const parts = cleaned.split(/\s+/);
+                // Columns: NAME STATE(localized) VERSION
+                if (parts.length >= 3) {
+                    const distroName = parts[0];
+                    const stateText = parts.slice(1, -1).join(' '); // middle columns = state
+                    const ver = parseInt(parts[parts.length - 1], 10);
+                    infoMap.set(distroName, {
+                        isDefault,
+                        state: stateText,
+                        version: (ver === 1 || ver === 2) ? ver : 2,
+                    });
                 }
             }
         } catch {
-            // if verbose fails, continue without default detection
+            this.logger.warn('Failed to parse --list --verbose; falling back to names only');
         }
 
-        // Probe each distro's running state and WSL version
-        const distros: WSLDistro[] = await Promise.all(names.map(async (name) => {
-            let state: WSLDistro['state'] = 'Stopped';
-            let version: 1 | 2 = 2;
+        // Also get running distro names for reliable state detection
+        const runningNames = new Set<string>();
+        try {
+            const runningOutput = await this.runWslCommand(['-l', '--running', '-q']);
+            for (const line of runningOutput.split('\n')) {
+                const name = line.replace(/\0/g, '').trim();
+                if (name) { runningNames.add(name); }
+            }
+        } catch {
+            // --running may not be available on older WSL; fall back to verbose state
+        }
 
-            try {
-                // wsl -d <name> --status exits 0 and prints WSL version if running/available
-                const statusOut = await this.runWslCommand(['-d', name, '--exec', 'echo', 'ok']);
-                if (statusOut.includes('ok')) {
-                    state = 'Running';
-                }
-            } catch {
+        return names.map(name => {
+            const info = infoMap.get(name);
+            // Prefer --running for state detection (no localization issue)
+            const isRunning = runningNames.has(name);
+            let state: WSLDistro['state'] = isRunning ? 'Running' : 'Stopped';
+            if (!isRunning && info?.state) {
+                // If --running didn't list it, it's Stopped (trust --running over verbose)
                 state = 'Stopped';
             }
-
-            try {
-                const infoOut = await this.runWslCommand(['--list', '--verbose']);
-                for (const line of infoOut.split('\n')) {
-                    const clean = line.replace(/\0/g, '').replace(/^\s*\*?\s*/, '');
-                    if (clean.startsWith(name)) {
-                        const parts = clean.trim().split(/\s+/);
-                        const v = parseInt(parts[parts.length - 1], 10);
-                        if (v === 1 || v === 2) {
-                            version = v;
-                        }
-                        break;
-                    }
-                }
-            } catch {
-                // default to version 2
-            }
-
-            return { name, state, version, isDefault: name === defaultName };
-        }));
-
-        return distros;
+            return {
+                name,
+                state,
+                version: info?.version ?? 2,
+                isDefault: info?.isDefault ?? false,
+            };
+        });
     }
 
     // Kept for unit tests
