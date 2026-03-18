@@ -2,7 +2,7 @@
   "name": "kiro-wsl",
   "displayName": "Kiro WSL",
   "description": "Open any folder in WSL2 and take advantage of Kiro's full feature set.",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "publisher": "yishiashia",
   "license": "MIT",
   "repository": {
