@@ -4,10 +4,16 @@
 .claude/**
 src/**
 node_modules/**
+out/**/*.d.ts
+out/**/*.d.ts.map
+out/**/*.map
+out/test/**
 .gitignore
 tsconfig.json
 webpack.config.js
-**/*.map
 **/*.ts
 *.vsix
 review*.md
+*review*.md
+*report*.md
+CLAUDE.md

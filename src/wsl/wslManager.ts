@@ -5,7 +5,7 @@ import { Logger } from '../common/logger';
 export interface WSLDistro {
     name: string;
     state: 'Running' | 'Stopped' | 'Installing';
-    version: 1 | 2;
+    version: 1 | 2 | undefined;
     isDefault: boolean;
 }
 
@@ -37,11 +37,16 @@ export class WSLManager {
             return [];
         }
 
-        // Parse --list --verbose once for default marker, state, and version.
-        // State text may be localized (e.g. "執行中" on zh-TW Windows) so we
-        // accept any non-empty string. The version column (last) is always a
-        // number and the '*' default marker is locale-independent.
-        const infoMap = new Map<string, { isDefault: boolean; state: string; version: 1 | 2 }>();
+        // Parse --list --verbose once for default marker, state hint, and version.
+        // State text may be localized (e.g. "執行中" on zh-TW Windows) — we don't
+        // rely on it for Running/Stopped (that comes from --running below), but we
+        // do preserve it to detect Installing distros.
+        // Parse --list --verbose using the known distro names from -l -q to avoid
+        // locale issues with multi-word STATE columns (e.g. "正在 執行" on zh-TW).
+        // Strategy: for each verbose line, find which known name it contains, then
+        // parse version (always last digit token) and state (everything between name and version).
+        const nameSet = new Set(names);
+        const infoMap = new Map<string, { isDefault: boolean; stateHint: string; version: 1 | 2 | undefined }>();
         try {
             const verboseOutput = await this.runWslCommand(['--list', '--verbose']);
             const lines = verboseOutput.split('\n').map(l => l.replace(/\0/g, ''));
@@ -52,18 +57,32 @@ export class WSLManager {
 
                 const isDefault = raw.trimStart().startsWith('*');
                 const cleaned = isDefault ? raw.trimStart().substring(1).trim() : raw.trim();
-                const parts = cleaned.split(/\s+/);
-                // Columns: NAME STATE(localized) VERSION
-                if (parts.length >= 3) {
-                    const distroName = parts[0];
-                    const stateText = parts.slice(1, -1).join(' '); // middle columns = state
-                    const ver = parseInt(parts[parts.length - 1], 10);
-                    infoMap.set(distroName, {
-                        isDefault,
-                        state: stateText,
-                        version: (ver === 1 || ver === 2) ? ver : 2,
-                    });
+
+                // VERSION is always the last token (a single digit)
+                const lastSpaceIdx = cleaned.lastIndexOf(' ');
+                if (lastSpaceIdx === -1) { continue; }
+                const verStr = cleaned.substring(lastSpaceIdx + 1).trim();
+                const ver = parseInt(verStr, 10);
+                const beforeVersion = cleaned.substring(0, lastSpaceIdx).trim();
+
+                // Match against known distro names (from -l -q) to split name from state.
+                // Try longest match first in case names overlap.
+                let matchedName: string | undefined;
+                for (const name of nameSet) {
+                    if (beforeVersion.startsWith(name) &&
+                        (!matchedName || name.length > matchedName.length)) {
+                        matchedName = name;
+                    }
                 }
+
+                if (!matchedName) { continue; }
+                const stateHint = beforeVersion.substring(matchedName.length).trim();
+
+                infoMap.set(matchedName, {
+                    isDefault,
+                    stateHint,
+                    version: (ver === 1 || ver === 2) ? ver : undefined,
+                });
             }
         } catch {
             this.logger.warn('Failed to parse --list --verbose; falling back to names only');
@@ -85,15 +104,19 @@ export class WSLManager {
             const info = infoMap.get(name);
             // Prefer --running for state detection (no localization issue)
             const isRunning = runningNames.has(name);
-            let state: WSLDistro['state'] = isRunning ? 'Running' : 'Stopped';
-            if (!isRunning && info?.state) {
-                // If --running didn't list it, it's Stopped (trust --running over verbose)
+            let state: WSLDistro['state'];
+            if (isRunning) {
+                state = 'Running';
+            } else if (info?.stateHint === 'Installing') {
+                // Preserve Installing state from verbose output
+                state = 'Installing';
+            } else {
                 state = 'Stopped';
             }
             return {
                 name,
                 state,
-                version: info?.version ?? 2,
+                version: info?.version,
                 isDefault: info?.isDefault ?? false,
             };
         });

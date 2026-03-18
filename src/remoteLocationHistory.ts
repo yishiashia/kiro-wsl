@@ -19,7 +19,7 @@ export class RemoteLocationHistory {
         return data[distro] || [];
     }
 
-    addLocation(distro: string, folderPath: string): void {
+    async addLocation(distro: string, folderPath: string): Promise<void> {
         const data = this.getData();
         const history = data[distro] || [];
 
@@ -38,17 +38,17 @@ export class RemoteLocationHistory {
         }
 
         data[distro] = history;
-        this.globalState.update(HISTORY_KEY, data);
+        await this.globalState.update(HISTORY_KEY, data);
     }
 
-    removeLocation(distro: string, folderPath: string): void {
+    async removeLocation(distro: string, folderPath: string): Promise<void> {
         const data = this.getData();
         const history = data[distro] || [];
         const index = history.indexOf(folderPath);
         if (index !== -1) {
             history.splice(index, 1);
             data[distro] = history;
-            this.globalState.update(HISTORY_KEY, data);
+            await this.globalState.update(HISTORY_KEY, data);
         }
     }
 

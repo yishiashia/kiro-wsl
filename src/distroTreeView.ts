@@ -12,7 +12,11 @@ class DistroTreeItem extends vscode.TreeItem {
             vscode.TreeItemCollapsibleState.Collapsed
         );
         this.contextValue = 'distro';
-        this.description = distro.state === 'Running' ? '● Running' : '○ Stopped';
+        const stateLabel = distro.state === 'Running' ? '● Running'
+            : distro.state === 'Installing' ? '◌ Installing'
+            : '○ Stopped';
+        const versionLabel = distro.version != null ? ` · WSL ${distro.version}` : '';
+        this.description = stateLabel + versionLabel;
         this.iconPath = new vscode.ThemeIcon(
             distro.state === 'Running' ? 'vm-running' : 'vm'
         );
@@ -29,16 +33,16 @@ class RecentFolderTreeItem extends vscode.TreeItem {
         this.description = '(recent)';
         this.iconPath = new vscode.ThemeIcon('folder');
         this.command = {
-            command: 'vscode.newWindow',
+            command: 'vscode.openFolder',
             title: 'Open Folder in WSL',
-            arguments: [{
-                remoteAuthority: `wsl+${encodeURIComponent(distroName)}`,
-                folderUri: vscode.Uri.from({
+            arguments: [
+                vscode.Uri.from({
                     scheme: 'vscode-remote',
                     authority: `wsl+${encodeURIComponent(distroName)}`,
                     path: folderPath,
                 }),
-            }],
+                { forceNewWindow: true },
+            ],
         };
     }
 }

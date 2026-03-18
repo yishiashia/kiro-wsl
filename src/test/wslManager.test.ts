@@ -68,6 +68,44 @@ describe('WSLManager', () => {
                 isDefault: true,
             });
         });
+        it('should parse distro names with spaces', () => {
+            const output = [
+                '  NAME                STATE     VERSION',
+                '* My Distro Name     Running   2',
+                '  Another One        Stopped   1',
+            ].join('\n');
+
+            const distros = WSLManager.parseDistroList(output);
+            expect(distros).to.have.lengthOf(2);
+            expect(distros[0]).to.deep.equal({
+                name: 'My Distro Name',
+                state: 'Running',
+                version: 2,
+                isDefault: true,
+            });
+            expect(distros[1]).to.deep.equal({
+                name: 'Another One',
+                state: 'Stopped',
+                version: 1,
+                isDefault: false,
+            });
+        });
+
+        it('should parse Installing state', () => {
+            const output = [
+                '  NAME      STATE        VERSION',
+                '  NewDist   Installing   2',
+            ].join('\n');
+
+            const distros = WSLManager.parseDistroList(output);
+            expect(distros).to.have.lengthOf(1);
+            expect(distros[0]).to.deep.equal({
+                name: 'NewDist',
+                state: 'Installing',
+                version: 2,
+                isDefault: false,
+            });
+        });
     });
 
     describe('parseDistroLine', () => {
@@ -105,6 +143,26 @@ describe('WSLManager', () => {
 
         it('should return null for invalid version', () => {
             expect(WSLManager.parseDistroLine('Ubuntu Running 3')).to.be.null;
+        });
+
+        it('should parse distro name with spaces', () => {
+            const result = WSLManager.parseDistroLine('My Custom Distro Running 2');
+            expect(result).to.deep.equal({
+                name: 'My Custom Distro',
+                state: 'Running',
+                version: 2,
+                isDefault: false,
+            });
+        });
+
+        it('should parse Installing state', () => {
+            const result = WSLManager.parseDistroLine('NewDist Installing 2');
+            expect(result).to.deep.equal({
+                name: 'NewDist',
+                state: 'Installing',
+                version: 2,
+                isDefault: false,
+            });
         });
     });
 });

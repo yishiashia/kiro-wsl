@@ -8,7 +8,7 @@ import { registerCommands } from './commands';
 import { RemoteLocationHistory } from './remoteLocationHistory';
 import { registerTreeView } from './distroTreeView';
 
-export function activate(context: vscode.ExtensionContext): void {
+export async function activate(context: vscode.ExtensionContext): Promise<void> {
     if (!isWindows()) {
         // Extension only works on Windows with WSL
         return;
@@ -41,7 +41,7 @@ export function activate(context: vscode.ExtensionContext): void {
 
     // Register tree view
     const history = new RemoteLocationHistory(context.globalState);
-    registerTreeView(context, wslManager, history, logger);
+    const treeDataProvider = registerTreeView(context, wslManager, history, logger);
 
     // Track opened WSL folders in history
     const remoteAuthority = (vscode.env as any).remoteAuthority as string | undefined;
@@ -50,9 +50,22 @@ export function activate(context: vscode.ExtensionContext): void {
         const folders = vscode.workspace.workspaceFolders;
         if (folders) {
             for (const folder of folders) {
-                history.addLocation(distro, folder.uri.path);
+                await history.addLocation(distro, folder.uri.path);
             }
         }
+
+        // Update history when workspace folders change, await before refresh
+        context.subscriptions.push(
+            vscode.workspace.onDidChangeWorkspaceFolders(async (e) => {
+                for (const added of e.added) {
+                    await history.addLocation(distro, added.uri.path);
+                }
+                for (const removed of e.removed) {
+                    await history.removeLocation(distro, removed.uri.path);
+                }
+                treeDataProvider.refresh();
+            })
+        );
     }
 
     logger.info('Kiro WSL extension activated.');

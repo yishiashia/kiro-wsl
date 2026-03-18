@@ -112,6 +112,24 @@ Example for corporate mirrors:
 - Set a custom URL via the `remote.WSL.serverDownloadUrlTemplate` setting
 - Ensure `curl` or `wget` is installed inside your WSL distribution
 
+## Security Considerations
+
+### REH Server Download
+
+On first connection, the extension downloads the Kiro REH server binary from the official Kiro CDN over **HTTPS**. The download URL is derived from Kiro's `product.json` and cannot be overridden by workspace-level settings (the `remote.WSL.serverDownloadUrlTemplate` setting is scoped to `machine` only).
+
+Currently, no SHA256 checksum verification is performed on the downloaded binary — this matches the behavior of Microsoft's official VS Code Remote extensions. Security relies on the integrity of the HTTPS connection to the CDN.
+
+**For enterprise environments**, we recommend:
+
+- Hosting the REH server binary on an internal mirror
+- Setting `remote.WSL.serverDownloadUrlTemplate` in Kiro's **machine-level** settings to point to your mirror
+- Verifying binary integrity through your internal distribution pipeline
+
+### Connection Token
+
+Each REH server instance uses a cryptographically random connection token (generated from `/dev/urandom`). The token is stored as a file inside WSL (not passed via CLI arguments), preventing exposure in process listings.
+
 ## How It Works
 
 ```
@@ -135,7 +153,7 @@ npm install          # Install dependencies
 npm run compile      # Build (development)
 npm run watch        # Build + watch for changes
 npm run build        # Build (production)
-npm test             # Run unit tests (38 tests)
+npm test             # Run unit tests (42 tests)
 npm run package      # Package as .vsix
 ```
 

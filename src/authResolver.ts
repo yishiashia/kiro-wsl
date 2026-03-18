@@ -45,11 +45,21 @@ export class RemoteWSLResolver {
 
         try {
             const config = getServerConfig();
-            const connection = await installAndStartServer(
-                this.wslManager,
-                distro,
-                config,
-                this.logger
+            const connection = await vscode.window.withProgress(
+                {
+                    location: vscode.ProgressLocation.Notification,
+                    title: `Kiro WSL: Setting up server in ${distro}...`,
+                    cancellable: false,
+                },
+                async (progress) => {
+                    progress.report({ message: 'Downloading and installing REH server...' });
+                    return await installAndStartServer(
+                        this.wslManager,
+                        distro,
+                        config,
+                        this.logger
+                    );
+                }
             );
 
             return {
@@ -60,6 +70,14 @@ export class RemoteWSLResolver {
         } catch (error) {
             if (error instanceof ServerInstallError) {
                 this.logger.error('Server installation failed', error);
+                vscode.window.showErrorMessage(
+                    `Failed to install Kiro server in WSL (${distro}): ${error.message}`,
+                    'Show Log'
+                ).then(action => {
+                    if (action === 'Show Log') {
+                        vscode.commands.executeCommand('kirowsl.showLog');
+                    }
+                }, () => { /* dialog dismissed */ });
                 const resolverError = new Error(
                     `Failed to install Kiro server in WSL (${distro}): ${error.message}`
                 );
@@ -69,6 +87,14 @@ export class RemoteWSLResolver {
             }
 
             this.logger.error('Unexpected error during resolution', error);
+            vscode.window.showErrorMessage(
+                `Failed to connect to WSL (${distro}): ${error instanceof Error ? error.message : String(error)}`,
+                'Show Log'
+            ).then(action => {
+                if (action === 'Show Log') {
+                    vscode.commands.executeCommand('kirowsl.showLog');
+                }
+            }, () => { /* dialog dismissed */ });
             const resolverError = new Error(
                 `Failed to connect to WSL (${distro}): ${error instanceof Error ? error.message : String(error)}`
             );

@@ -65,7 +65,8 @@
         "remote.WSL.serverDownloadUrlTemplate": {
           "type": "string",
           "default": "",
-          "description": "URL template for Kiro REH server download. Variables: ${version}, ${commit}, ${quality}, ${arch}, ${os}"
+          "scope": "machine",
+          "description": "URL template for Kiro REH server download. Variables: ${version}, ${commit}, ${quality}, ${arch}, ${os}. This setting cannot be overridden by workspace settings for security reasons."
         }
       }
     },
@@ -95,10 +96,10 @@
     }
   },
   "scripts": {
+    "vscode:prepublish": "webpack --mode production",
     "compile": "webpack --mode development",
     "watch": "webpack --mode development --watch",
     "build": "webpack --mode production",
-    "lint": "eslint src --ext ts",
     "test": "mocha --require ts-node/register --require src/test/setup.ts 'src/test/**/*.test.ts'",
     "package": "npx @vscode/vsce package --no-dependencies"
   },

@@ -36,43 +36,43 @@ describe('RemoteLocationHistory', () => {
         expect(history.getHistory('Ubuntu')).to.deep.equal([]);
     });
 
-    it('should add location to empty history', () => {
-        history.addLocation('Ubuntu', '/home/user/proj');
+    it('should add location to empty history', async () => {
+        await history.addLocation('Ubuntu', '/home/user/proj');
         expect(history.getHistory('Ubuntu')).to.deep.equal(['/home/user/proj']);
     });
 
-    it('should not add duplicate locations', () => {
-        history.addLocation('Ubuntu', '/home/user/proj');
-        history.addLocation('Ubuntu', '/home/user/proj');
+    it('should not add duplicate locations', async () => {
+        await history.addLocation('Ubuntu', '/home/user/proj');
+        await history.addLocation('Ubuntu', '/home/user/proj');
         expect(history.getHistory('Ubuntu')).to.deep.equal(['/home/user/proj']);
     });
 
-    it('should move duplicate to front on re-add', () => {
-        history.addLocation('Ubuntu', '/home/user/a');
-        history.addLocation('Ubuntu', '/home/user/b');
-        history.addLocation('Ubuntu', '/home/user/a');
+    it('should move duplicate to front on re-add', async () => {
+        await history.addLocation('Ubuntu', '/home/user/a');
+        await history.addLocation('Ubuntu', '/home/user/b');
+        await history.addLocation('Ubuntu', '/home/user/a');
         expect(history.getHistory('Ubuntu')).to.deep.equal([
             '/home/user/a',
             '/home/user/b',
         ]);
     });
 
-    it('should remove location', () => {
-        history.addLocation('Ubuntu', '/home/user/proj');
-        history.removeLocation('Ubuntu', '/home/user/proj');
+    it('should remove location', async () => {
+        await history.addLocation('Ubuntu', '/home/user/proj');
+        await history.removeLocation('Ubuntu', '/home/user/proj');
         expect(history.getHistory('Ubuntu')).to.deep.equal([]);
     });
 
-    it('should maintain separate histories per distro', () => {
-        history.addLocation('Ubuntu', '/ubuntu/path');
-        history.addLocation('Debian', '/debian/path');
+    it('should maintain separate histories per distro', async () => {
+        await history.addLocation('Ubuntu', '/ubuntu/path');
+        await history.addLocation('Debian', '/debian/path');
         expect(history.getHistory('Ubuntu')).to.deep.equal(['/ubuntu/path']);
         expect(history.getHistory('Debian')).to.deep.equal(['/debian/path']);
     });
 
-    it('should limit history to 10 entries', () => {
+    it('should limit history to 10 entries', async () => {
         for (let i = 0; i < 12; i++) {
-            history.addLocation('Ubuntu', `/path/${i}`);
+            await history.addLocation('Ubuntu', `/path/${i}`);
         }
         const result = history.getHistory('Ubuntu');
         expect(result).to.have.lengthOf(10);
@@ -80,8 +80,8 @@ describe('RemoteLocationHistory', () => {
         expect(result[9]).to.equal('/path/2');
     });
 
-    it('should no-op when removing non-existent location', () => {
-        history.removeLocation('Ubuntu', '/nonexistent');
+    it('should no-op when removing non-existent location', async () => {
+        await history.removeLocation('Ubuntu', '/nonexistent');
         expect(history.getHistory('Ubuntu')).to.deep.equal([]);
     });
 });

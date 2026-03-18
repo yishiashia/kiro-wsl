@@ -67,6 +67,7 @@ export function generateInstallScript(config: IServerConfig): string {
     return [
         '#!/bin/bash',
         'set -e',
+        'umask 077',
         '',
         '# --- Values injected by extension (single-quoted, no bash interpretation) ---',
         `COMMIT='${bashEscape(commit)}'`,
@@ -74,6 +75,15 @@ export function generateInstallScript(config: IServerConfig): string {
         `DATA_FOLDER_NAME='${bashEscape(serverDataFolderName)}'`,
         `DOWNLOAD_URL_X64='${bashEscape(downloadUrlX64)}'`,
         `DOWNLOAD_URL_ARM64='${bashEscape(downloadUrlArm64)}'`,
+        '',
+        '# Check required tools',
+        'for cmd in base64 setsid tar sed nohup; do',
+        '    if ! command -v "$cmd" >/dev/null 2>&1; then',
+        '        echo "Required tool not found: $cmd. Please install it (e.g. apt install coreutils util-linux)." >&2',
+        '        echo "1:::::::::"',
+        '        exit 1',
+        '    fi',
+        'done',
         '',
         '# Detect architecture',
         'UARCH=$(uname -m)',
@@ -100,7 +110,21 @@ export function generateInstallScript(config: IServerConfig): string {
         '                echo "0::${PORT}::${TOKEN}::${EXISTING_PID}::${LOG_FILE}"',
         '                exit 0',
         '            fi',
+        '            # Port may not be logged yet; wait briefly before restarting',
+        '            i=1',
+        '            while [ "$i" -le 5 ]; do',
+        '                sleep 1',
+        '                PORT=$(sed -n \'s/.*Extension host agent listening on \\([0-9]\\+\\).*/\\1/p\' "$LOG_FILE" | tail -1)',
+        '                if [ -n "$PORT" ] && [ -n "$TOKEN" ]; then',
+        '                    echo "0::${PORT}::${TOKEN}::${EXISTING_PID}::${LOG_FILE}"',
+        '                    exit 0',
+        '                fi',
+        '                i=$((i + 1))',
+        '            done',
         '        fi',
+        '        # Running but no usable port/token — stop and restart',
+        '        kill "$EXISTING_PID" 2>/dev/null || true',
+        '        rm -f "$PID_FILE"',
         '    else',
         '        rm -f "$PID_FILE"',
         '    fi',
@@ -149,7 +173,8 @@ export function generateInstallScript(config: IServerConfig): string {
         'echo "$SERVER_PID" > "$PID_FILE"',
         '',
         '# Wait for server to start and report its port',
-        'for i in $(seq 1 30); do',
+        'i=1',
+        'while [ "$i" -le 30 ]; do',
         '    if [ -f "$LOG_FILE" ]; then',
         '        PORT=$(sed -n \'s/.*Extension host agent listening on \\([0-9]\\+\\).*/\\1/p\' "$LOG_FILE" | tail -1)',
         '        if [ -n "$PORT" ]; then',
@@ -158,6 +183,7 @@ export function generateInstallScript(config: IServerConfig): string {
         '        fi',
         '    fi',
         '    sleep 1',
+        '    i=$((i + 1))',
         'done',
         '',
         'echo "Timed out waiting for server to start" >&2',
@@ -175,7 +201,9 @@ export async function installAndStartServer(
     logger.info(`Installing/starting REH server in ${distro}...`);
 
     const script = generateInstallScript(config);
-    logger.debug(`Generated install script:\n${script}`);
+    // Log script with URLs redacted to avoid leaking signed URLs or mirror credentials
+    const redactedScript = script.replace(/(DOWNLOAD_URL(?:_X64|_ARM64)?=')[^']*/g, "$1<redacted>");
+    logger.debug(`Generated install script:\n${redactedScript}`);
 
     // Use execScript to pipe via stdin — avoids Windows command-line quoting issues
     const result = wslManager.execScript(script, distro);
@@ -186,7 +214,16 @@ export async function installAndStartServer(
         logger.debug(`[WSL stdout] ${data.trim()}`);
     });
 
-    const exitCode = await result.exitPromise;
+    let exitCode: number;
+    try {
+        exitCode = await result.exitPromise;
+    } catch (err) {
+        const message = err instanceof Error ? err.message : String(err);
+        throw new ServerInstallError(
+            `Failed to start wsl.exe for ${distro}: ${message}` +
+            (result.stderr ? ` (stderr: ${result.stderr})` : '')
+        );
+    }
     output = output || result.stdout;
 
     if (result.stderr) {
@@ -197,11 +234,21 @@ export async function installAndStartServer(
 
     if (!output.trim()) {
         throw new ServerInstallError(
-            `Server setup produced no output. Exit code: ${exitCode}. Stderr: ${result.stderr}`
+            `Server setup produced no output. Exit code: ${exitCode}. Stderr: ${result.stderr || '(empty)'}`
         );
     }
 
-    const connection = parseServerOutput(output);
-    logger.info(`REH server running on ${connection.host}:${connection.port}`);
-    return connection;
+    try {
+        const connection = parseServerOutput(output);
+        logger.info(`REH server running on ${connection.host}:${connection.port}`);
+        return connection;
+    } catch (err) {
+        // Enrich parse errors with stderr and exit code for easier debugging
+        if (err instanceof ServerInstallError && (exitCode !== 0 || result.stderr)) {
+            throw new ServerInstallError(
+                `${err.message} (exit code: ${exitCode}, stderr: ${result.stderr || '(empty)'})`
+            );
+        }
+        throw err;
+    }
 }

@@ -9,8 +9,13 @@ async function pickDistro(wslManager: WSLManager, logger: Logger): Promise<WSLDi
     } catch (err) {
         logger.error('Failed to list WSL distributions', err);
         vscode.window.showErrorMessage(
-            `Kiro WSL: Failed to list WSL distributions. Is WSL installed? (${err instanceof Error ? err.message : err})`
-        );
+            `Kiro WSL: Failed to list WSL distributions. Is WSL installed? (${err instanceof Error ? err.message : err})`,
+            'Show Log'
+        ).then(action => {
+            if (action === 'Show Log') {
+                vscode.commands.executeCommand('kirowsl.showLog');
+            }
+        }, () => { /* dialog dismissed */ });
         return undefined;
     }
 
@@ -21,9 +26,19 @@ async function pickDistro(wslManager: WSLManager, logger: Logger): Promise<WSLDi
         return undefined;
     }
 
-    const items = distros.map(d => ({
+    // Filter out confirmed WSL1 distros — tunnel logic requires WSL2
+    // Allow undefined version through but require explicit user confirmation
+    const eligible = distros.filter(d => d.version !== 1);
+    if (eligible.length === 0) {
+        vscode.window.showErrorMessage(
+            'No WSL 2 distributions found. Kiro WSL requires WSL 2. Convert existing distributions with: wsl --set-version <distro> 2'
+        );
+        return undefined;
+    }
+
+    const items = eligible.map(d => ({
         label: d.name + (d.isDefault ? ' (Default)' : ''),
-        description: `${d.state} · WSL ${d.version}`,
+        description: `${d.state}` + (d.version != null ? ` · WSL ${d.version}` : ' · version unknown'),
         distro: d,
     }));
 
@@ -31,7 +46,23 @@ async function pickDistro(wslManager: WSLManager, logger: Logger): Promise<WSLDi
         placeHolder: 'Select a WSL distribution',
     });
 
-    return picked?.distro;
+    if (!picked) {
+        return undefined;
+    }
+
+    if (picked.distro.version == null) {
+        const action = await vscode.window.showWarningMessage(
+            `Kiro WSL: The WSL version for "${picked.distro.name}" could not be determined. ` +
+            'This extension requires WSL 2. Continue anyway?',
+            'Continue',
+            'Cancel'
+        );
+        if (action !== 'Continue') {
+            return undefined;
+        }
+    }
+
+    return picked.distro;
 }
 
 async function getDefaultDistro(wslManager: WSLManager, logger: Logger): Promise<WSLDistro | undefined> {
@@ -41,8 +72,13 @@ async function getDefaultDistro(wslManager: WSLManager, logger: Logger): Promise
     } catch (err) {
         logger.error('Failed to list WSL distributions', err);
         vscode.window.showErrorMessage(
-            `Kiro WSL: Failed to list WSL distributions. Is WSL installed? (${err instanceof Error ? err.message : err})`
-        );
+            `Kiro WSL: Failed to list WSL distributions. Is WSL installed? (${err instanceof Error ? err.message : err})`,
+            'Show Log'
+        ).then(action => {
+            if (action === 'Show Log') {
+                vscode.commands.executeCommand('kirowsl.showLog');
+            }
+        }, () => { /* dialog dismissed */ });
         return undefined;
     }
 
@@ -53,7 +89,33 @@ async function getDefaultDistro(wslManager: WSLManager, logger: Logger): Promise
         return undefined;
     }
 
-    return distros.find(d => d.isDefault) || distros[0];
+    // Filter out confirmed WSL1 distros — allow undefined version through (warn before use)
+    const eligible = distros.filter(d => d.version !== 1);
+    if (eligible.length === 0) {
+        vscode.window.showErrorMessage(
+            'No WSL 2 distributions found. Kiro WSL requires WSL 2. Convert existing distributions with: wsl --set-version <distro> 2'
+        );
+        return undefined;
+    }
+
+    const picked = eligible.find(d => d.isDefault) || eligible[0];
+    if (!picked) {
+        return undefined;
+    }
+
+    if (picked.version == null) {
+        const action = await vscode.window.showWarningMessage(
+            `Kiro WSL: The WSL version for "${picked.name}" could not be determined. ` +
+            'This extension requires WSL 2. Continue anyway?',
+            'Continue',
+            'Cancel'
+        );
+        if (action !== 'Continue') {
+            return undefined;
+        }
+    }
+
+    return picked;
 }
 
 async function connectToDistro(
@@ -61,10 +123,18 @@ async function connectToDistro(
     newWindow: boolean
 ): Promise<void> {
     const authority = `wsl+${encodeURIComponent(distroName)}`;
-    await vscode.commands.executeCommand('vscode.newWindow', {
-        remoteAuthority: authority,
-        reuseWindow: !newWindow,
-    });
+    try {
+        await vscode.commands.executeCommand('vscode.newWindow', {
+            remoteAuthority: authority,
+            reuseWindow: !newWindow,
+        });
+    } catch (err) {
+        vscode.window.showErrorMessage(
+            `Kiro WSL: Failed to open WSL window for ${distroName}. ` +
+            `${err instanceof Error ? err.message : String(err)}`
+        );
+        throw err;
+    }
 }
 
 export function registerCommands(
